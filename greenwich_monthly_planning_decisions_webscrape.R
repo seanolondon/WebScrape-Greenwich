@@ -16,6 +16,7 @@ library(dplyr,lib = "C:/Program Files/R/R-3.4.1/library")
 library(tidyr,lib = "C:/Program Files/R/R-3.4.1/library")
 library(RCurl,lib = "C:/Program Files/R/R-3.4.1/library")
 library(curl,lib = "C:/Program Files/R/R-3.4.1/library")
+library(lubridate, lib = "C:/Program Files/R/R-3.4.1/library")
 #library(RPostgreSQL, lib = "C:/Program Files/R/R-3.4.1/library")
 #library(rpostgis, lib = "C:/Program Files/R/R-3.4.1/library")
 #library(arcgisbinding, lib = "C:/Program Files/R/R-3.4.1/library")
@@ -32,9 +33,9 @@ greenwhichForm <-html_form(session)[[1]]
 
 #which month to query
 month <- "Nov 17"
-parish <- "GRN"
+area <- "GRN"
 
-greenwhichForm <- set_values(greenwhichForm, searchCriteria.parish = parish, month = month, dateType = "DC_Decided")
+greenwhichForm <- set_values(greenwhichForm, searchCriteria.parish = area, month = month, dateType = "DC_Decided")
 session1 <- submit_form(session,greenwhichForm)
 
 #Row1 of table
@@ -48,8 +49,6 @@ table <- session1 %>%
 
 wideTable <- table %>%
   spread(X1,X2)
-
-linkCount <- length(session1 %>% html_nodes(xpath = '//*[@id="searchresults"]/li/a') %>% html_text())
 
 #page 
 pageScrape <- function(hyperlink, session) {
@@ -101,6 +100,12 @@ pager <- function() {
     }
 }
 
+formFunction <- function (date, area) {
+  
+greenwhichForm <<- set_values(greenwhichForm, searchCriteria.parish = area, month = date, dateType = "DC_Decided")
+session1 <<- submit_form(session,greenwhichForm)
+  
+linkCount <- length(session1 %>% html_nodes(xpath = '//*[@id="searchresults"]/li/a') %>% html_text())
 
 Pages <- session1 %>% 
           html_nodes(xpath = paste0('//*[@id="searchResultsContainer"]/p[1]/span[1]/text()')) %>% 
@@ -123,12 +128,48 @@ for(i in 0:pageLimit) {
   lapply(linkCount, pageScrape, session = session1)
   
   pager()
+  }
 }
 
+####################Actual running of functions ######################
 
+##get current month
+#currentMonth <- paste(month.abb[month(today())], year(today()) %% 100)  
+
+#get last month's - default
+previousMonth <- floor_date(today(), "month") - months(1)
+
+month.abb[month(previousMonth)]
+
+enterDate <- paste(month.abb[month(previousMonth)], year(previousMonth) %% 100) 
+
+#areas to enter to get all of the greenwich borough
+parish1 <- "ETM"
+parish2 <- "GRN"
+parish3 <- "WOL"
+
+
+####actual functions which returns data
+formFunction(enterDate, parish1)
+formFunction(enterDate, parish2)
+formFunction(enterDate, parish3)
+
+##duplicate check before final
 uniqueRefWideTable <- distinct(wideTable, Reference, .keep_all = TRUE)  
 
-write.csv(uniqueRefWideTable, "Q:/Projects/Data Science/Data Cakes/WebScrape Greenwich/november_decisions.csv")
-#write.csv("N:/LDD/Web_Scrape/Planning_Decision_List/Greenwich/november_decisions.csv")
+fileName <- paste0("D:/R_Scheduled_tasks/greenwhich scrape",month.abb[month(previousMonth)], year(previousMonth),"_decisions.csv")
 
-##update to test github no 12/13/2017
+write.csv(uniqueRefWideTable, fileName)
+
+###Jenkins/Output Check
+
+setwd("D:/R_Scheduled_tasks/greenwhich scrape")
+
+stringDetect <- paste0(month.abb[month(previousMonth)], year(previousMonth),"_decisions.csv")
+
+if (nrow(uniqueRefWideTable) > 25 && ncol(uniqueRefWideTable) > 15 && stringr::str_detect(list.files(path = ".", pattern = stringDetect), pattern = stringDetect) && file.info(stringDetect)$size > 50000) {
+  print("SUCCESSFUL")
+} else {
+  print("ERROR IN PROCESS")
+}
+
